@@ -128,8 +128,10 @@ class ParallelBatchCollector:
         return map(batch_range, range(self._num_batches))
 
     def _rng(self):
+        rng = _batch_range(self._batch_num, self.batch_size, self._obj_length)
         self._batch_num += 1
-        return _batch_range(self._batch_num, self.batch_size, self._obj_length)
+
+        return rng
 
 
 class _IndexableWrap:
