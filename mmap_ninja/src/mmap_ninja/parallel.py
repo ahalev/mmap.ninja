@@ -59,7 +59,7 @@ class ParallelBatchCollector:
             msg = 'joblib is not installed. Install joblib or run with n_jobs=None to ignore parallelization.'
             raise ImportError(msg)
 
-        _parallel = Parallel(n_jobs=n_jobs, **kwargs)
+        _parallel = Parallel(n_jobs=n_jobs, return_as='generator', **kwargs)
         _parallel.__enter__()
         return _parallel
 
