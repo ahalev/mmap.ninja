@@ -118,12 +118,25 @@ def indexable_obj(request):
     return _Indexable(length, has_length)
 
 
-@pytest.mark.parametrize("n, indexable_obj", [(30, (30, True)), (3, (3, False))], indirect=["indexable_obj"])
+@pytest.mark.parametrize("n, indexable_obj", [(30, (30, True)), (3, (3, True))], indirect=["indexable_obj"])
 @pytest.mark.parametrize("n_jobs", [1, 2])
-def test_from_indexable_obj(tmp_path, n, indexable_obj, n_jobs):
+def test_from_indexable_obj_with_length(tmp_path, n, indexable_obj, n_jobs):
     memmap = RaggedMmap.from_indexable(tmp_path / "strings_memmap", indexable_obj, 4, n_jobs=n_jobs, verbose=True)
     for i in range(n):
         assert np.allclose(np.ones(12) * i, memmap[i])
+
+
+@pytest.mark.parametrize("n, indexable_obj", [(30, (30, False)), (3, (3, False))], indirect=["indexable_obj"])
+def test_from_indexable_obj_without_length_no_parallel(tmp_path, n, indexable_obj):
+    memmap = RaggedMmap.from_indexable(tmp_path / "strings_memmap", indexable_obj, 4, n_jobs=1, verbose=True)
+    for i in range(n):
+        assert np.allclose(np.ones(12) * i, memmap[i])
+
+
+@pytest.mark.parametrize("n, indexable_obj", [(30, (30, False))], indirect=["indexable_obj"])
+def test_from_indexable_obj_without_length_parallel(tmp_path, n, indexable_obj):
+    with pytest.raises(TypeError):
+        _ = RaggedMmap.from_indexable(tmp_path / "strings_memmap", indexable_obj, 4, n_jobs=2, verbose=True)
 
 
 @pytest.fixture
@@ -140,11 +153,16 @@ def indexable_func(request):
 
 
 @pytest.mark.parametrize("n, indexable_func", [(30, 30), (3, 3)], indirect=["indexable_func"])
-@pytest.mark.parametrize("n_jobs", [1, 2])
-def test_from_indexable_func(tmp_path, n, indexable_func, n_jobs):
-    memmap = RaggedMmap.from_indexable(tmp_path / "strings_memmap", indexable_func, 4, n_jobs=n_jobs, verbose=True)
+def test_from_indexable_func_no_parallel(tmp_path, n, indexable_func):
+    memmap = RaggedMmap.from_indexable(tmp_path / "strings_memmap", indexable_func, 4, n_jobs=1, verbose=True)
     for i in range(n):
         assert np.allclose(np.ones(12) * i, memmap[i])
+
+
+@pytest.mark.parametrize("n, indexable_func", [(30, 30)], indirect=["indexable_func"])
+def test_from_indexable_func_parallel(tmp_path, n, indexable_func):
+    with pytest.raises(TypeError):
+        _ = RaggedMmap.from_indexable(tmp_path / "strings_memmap", indexable_func, 4, n_jobs=2, verbose=True)
 
 
 def test_nd_case(tmp_path):
