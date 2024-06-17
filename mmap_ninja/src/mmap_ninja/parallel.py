@@ -1,5 +1,6 @@
 from enum import Enum
 from functools import partial
+from math import inf
 from tqdm.auto import tqdm
 
 try:
@@ -64,17 +65,10 @@ class ParallelBatchCollector:
         return _parallel
 
     def batches(self):
-        while not self.exhausted():
-            yield self.collect_batch()
-
-    def collect_batch(self):
         if self._parallel is None:
-            batch = self._collect_no_parallel_batch()
+            yield from self._collect_no_parallel_batches()
         else:
-            batch = self._collect_parallel_batch()
-
-        self._update_pbar(batch)
-        return batch
+            yield from self._collect_parallel_batches()
 
     def _init_pbar(self, verbose):
         if not verbose:
@@ -85,22 +79,31 @@ class ParallelBatchCollector:
         if self._pbar is not None:
             self._pbar.update(len(batch))
 
+        return batch
+
+    def _collect_no_parallel_batches(self):
+        while not self.exhausted():
+            yield self._update_pbar(self._collect_no_parallel_batch())
+
     def _collect_no_parallel_batch(self):
-        results = [_get_from_indexable(self.indexable, j) for j in self._rng()]
+        results = _collect_batch(self.indexable, self._rng())
 
         if self.exhausted(results):
             results = [r for r in results if r is not EXHAUSTED]
 
         return results
 
-    def _collect_parallel_batch(self):
-        func = delayed(partial(_get_from_indexable, self.indexable))
+    def _collect_parallel_batches(self):
+        func = delayed(partial(_collect_batch, self.indexable))
 
-        results = self._parallel(func(j) for j in self._rng())
+        yield from filter(self._parallel_filter, self._parallel(func(rng) for rng in self._all_ranges()))
 
-        if self.exhausted(results):
-            results = [r for r in results if r is not EXHAUSTED]
-            self._parallel.__exit__(None, None, None)
+        self._parallel.__exit__(None, None, None)
+
+    def _parallel_filter(self, results):
+        self._batch_num += 1
+        self.exhausted(results)
+        self._update_pbar(results)
 
         return results
 
@@ -116,13 +119,13 @@ class ParallelBatchCollector:
     def completed_batches(self):
         return self._num_batches is not None and self._batch_num == self._num_batches
 
+    def _all_ranges(self):
+        batch_range = partial(_batch_range, batch_size=self.batch_size, total_length=self._obj_length)
+        return map(batch_range, range(self._num_batches))
+
     def _rng(self):
-        start = self.batch_size * self._batch_num
-        stop = self.batch_size * (1 + self._batch_num)
-
         self._batch_num += 1
-
-        return range(start, stop)
+        return _batch_range(self._batch_num, self.batch_size, self._obj_length)
 
 
 class _IndexableWrap:
@@ -150,6 +153,22 @@ def make_indexable(func, length=None):
     if length is not None:
         return _IndexableLengthWrap(func, length)
     return _IndexableWrap(func)
+
+
+def _collect_batch(indexable, rng):
+    results = [_get_from_indexable(indexable, j) for j in rng]
+
+    return results
+
+
+def _batch_range(batch_num, batch_size, total_length=inf):
+    start = batch_size * batch_num
+    stop = batch_size * (1 + batch_num)
+
+    if stop >= total_length:
+        stop = total_length
+
+    return range(start, stop)
 
 
 def _get_from_indexable(indexable, item,):
