@@ -23,7 +23,7 @@ class ParallelBatchCollector:
     _parallel: Parallel = None
 
     def __init__(self, indexable, batch_size, n_jobs=None, verbose=False, **kwargs):
-        self.indexable, self._obj_length, self._num_batches = self.verify(indexable, batch_size)
+        self.indexable, self._obj_length, self._num_batches = self.verify(indexable, batch_size, n_jobs)
         self.batch_size = batch_size
 
         self._pbar = self._init_pbar(verbose)
@@ -32,7 +32,7 @@ class ParallelBatchCollector:
         self._exhausted = False
 
     @staticmethod
-    def verify(indexable, batch_size):
+    def verify(indexable, batch_size, n_jobs):
         try:
             _ = indexable.__getitem__
         except AttributeError:
@@ -44,8 +44,12 @@ class ParallelBatchCollector:
 
         try:
             length = len(indexable)
-        except TypeError:
-            length = None
+        except TypeError as e:
+            if n_jobs not in (1, None):
+                msg = 'Passed object has no len() and cannot be utilized in parallel. ' \
+                      'Pass n_jobs=None or define __len__.'
+                raise TypeError(msg) from e
+            length = inf
             num_batches = None
         else:
             num_batches = length // batch_size + (length % batch_size != 0)
